@@ -44,7 +44,7 @@ app.get("/api", (req: any, res: any) => {
 
 var clientSockets = {} as ClientSockets
 // const clientToClientCalls = {} as Record<Calls>
-var calls = {} as Record<string, CallModel>
+var calls = {} as Record<string, any>
 let checkConnectionInterval:any = null
 
 type CallModel = {
@@ -72,15 +72,20 @@ app.ws('/:userId', async (ws: any, req: any) => {
 
     ws.on('message', (data: any) => {
         const msg = JSON.parse(data)
-        if (msg.topic == "connection-start") {
-            sendOffer(clientSockets,msg.message)
+        // if (msg.topic == "connection-start") {
+        //     sendOffer(clientSockets,msg.message)
+        // }
+        if(msg.topic == 'new_offer'){
+            handleNewOffer(clientSockets,msg.message)
         }
-        if (msg.topic == 'connection-answer') {
-            establishCall(msg.message.callId)
+        if (msg.topic == 'client_answer_to_offer') {
+            console.log(msg)
+            establishCall(clientSockets,msg.message)
         }
         if(msg.topic == "user-online"){
             refreshOnlineUsers()
         }
+        
         
     })
 
@@ -96,24 +101,26 @@ app.ws('/:userId', async (ws: any, req: any) => {
 
 const forEachClient = (clientSockets: ClientSockets, cb: (value: ClientSocket, index: number, array: ClientSocket[]) => any) => Object.values(clientSockets).forEach(cb)
 
-const sendOffer = (clientSockets: ClientSockets, message: any) => {
+const handleNewOffer = (clientSockets: ClientSockets, message: any) => {
     forEachClient(clientSockets, (client, i, arr) => {
+        
         console.log(message)
         console.log(message.target)
         if (client.uid != message.target) return;
         const callId = uuidv4()
         message.callId = callId
-        const newCall = {
+        const newOffer = {
+            callId:uuidv4(),
             origin: message.origin,
             target: message.target,
-            callId: callId,
+            offer:message.offer,
             time: new Date().toISOString(),
-            onGoingCall: false,
-            answerPending: true,
-            topic: message.topic
         }
-        calls[callId] = newCall
-        client.ws.send(JSON.stringify({topic:message.topic,message:newCall}))
+        calls[callId] = {
+            callId:callId
+        }
+        console.log(newOffer)
+        client.ws.send(JSON.stringify({topic:'incoming_offer',message:newOffer}))
     })
 }
 
@@ -122,9 +129,21 @@ const iceCandidate = (clientSockets:ClientSockets,message:any) =>{
 
 }
 
-const establishCall = (callId: string) => {
-    const call = calls[callId]
-    console.log(`starting call between user ${call.origin} and ${call.target}`)
+const establishCall = (clientSockets:ClientSockets,message:any) => {
+    forEachClient(clientSockets, (client, i, arr) => {
+        
+        console.log(client.uid,message)
+        if (client.uid != message.target) return;
+       
+        const newAnswer = {
+            answer:message.answer,
+            origin:message.origin
+        }
+        //console.log(newAnswer)
+        client.ws.send(JSON.stringify({topic:'incoming_answer',message:newAnswer}))
+    })
+ 
+    //console.log(`starting call between user ${call.origin} and ${call.target}`)
 }
 
 const refreshOnlineUsers = () =>{

@@ -1,7 +1,7 @@
 import logo from './logo.svg';
 import './App.css';
 import { useEffect, useState } from 'react'
-import { CallModel, webRtcStore } from './stores/webrts';
+import { CallModel, creatingAnswer, creatingOffer, webRtcStore } from './stores/webrts';
 import { observer } from 'mobx-react-lite';
 
 const App = observer( function App() {
@@ -20,17 +20,11 @@ const App = observer( function App() {
 
 
   const startCall = () => {
-    webRtcStore.sendMessage('connection-start',{ message: `i am user ${webRtcStore.userId} and i call ${targetUser}`, topic: 'connection-start', target: targetUser, origin: webRtcStore.userId })
+    creatingOffer(targetUser)
+    //webRtcStore.sendMessage('connection-start',{ message: `i am user ${webRtcStore.userId} and i call ${targetUser}`, topic: 'connection-start', target: targetUser, origin: webRtcStore.userId })
   }
-
   const answerCall = (call:CallModel) =>{
-    webRtcStore.sendMessage('connection-answer',{
-      topic:'connection-answer',
-      callId:call.callId,
-      origin:call.target,
-      target:call.origin,
-      answer:true
-    })
+    creatingAnswer(call.origin,call.callId)
   }
   const changeUserid = (id) =>{
     webRtcStore.userId = id
