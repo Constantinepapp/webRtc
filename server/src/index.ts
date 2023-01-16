@@ -85,6 +85,9 @@ app.ws('/:userId', async (ws: any, req: any) => {
         if(msg.topic == "user-online"){
             refreshOnlineUsers()
         }
+        if(msg.topic == "candidate"){
+            handleCandidateChange(msg.message)
+        }
         
         
     })
@@ -98,6 +101,12 @@ app.ws('/:userId', async (ws: any, req: any) => {
         disconnectWS(clientSockets, userId)
     })
 })
+
+const handleCandidateChange = (message:any) =>{
+    forEachClient(clientSockets, (client, i, arr) => {
+        client.ws.send(JSON.stringify({topic:'server_candidate',candidate:message.candidate}))
+    })
+}
 
 const forEachClient = (clientSockets: ClientSockets, cb: (value: ClientSocket, index: number, array: ClientSocket[]) => any) => Object.values(clientSockets).forEach(cb)
 
