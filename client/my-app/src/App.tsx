@@ -41,20 +41,25 @@ const App = observer(function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <div style={{display:'flex',gap:'10vw'}}>
+        <div style={{ display: 'flex', gap: '10vw' }}>
           <VideoStream />
           <VideoStreamPeer />
         </div>
+        <p>Online Users : 
+          <div style={{ display: 'flex' }}>{Object.keys(webRtcStore.onlineUsers).map(key => (
+            <>
+              <p>User:{key}</p>
+            </>
 
-        <div style={{ display: 'flex' }}>{Object.keys(webRtcStore.onlineUsers).map(key => (
-          <h3>{key}</h3>
-        ))}</div>
+          ))}</div>
+        </p>
+
         <label>Origin</label>
         <input value={webRtcStore.userId} onChange={e => changeUserid(e.target.value)} />
         <label>Target</label>
         <input value={targetUser} onChange={e => setTargetUser(e.target.value)} />
         <button onClick={startCall}>Start Call</button>
-        {Object.values(webRtcStore.incomingCall).map(call => (
+        {Object.values(webRtcStore.incomingCalls).map(call => (
           <>
             <IncomingCall call={call} />
           </>
@@ -66,7 +71,7 @@ const App = observer(function App() {
 })
 
 const IncomingCall = ({ call }) => {
-  console.log(toJS(webRtcStore.incomingCall))
+  console.log(toJS(webRtcStore.incomingCalls))
   console.log(call)
   const answerCall = (call: CallModel) => {
     creatingAnswer(call.origin, call.callId)
@@ -120,13 +125,13 @@ const VideoStream = () => {
 
   useEffect(() => {
     if (videoRef.current) {
-      try{
+      try {
         getVideo();
       }
-      catch(e){
+      catch (e) {
         console.log(e)
       }
-      
+
     }
   }, [videoRef.current]);
 

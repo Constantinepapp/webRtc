@@ -76,10 +76,11 @@ app.ws('/:userId', async (ws: any, req: any) => {
         //     sendOffer(clientSockets,msg.message)
         // }
         if(msg.topic == 'new_offer'){
-            handleNewOffer(clientSockets,msg.message)
+            const callId = newCall(msg.message)
+            handleNewOffer(clientSockets,msg.message,callId)
         }
         if (msg.topic == 'client_answer_to_offer') {
-            console.log(msg)
+            callStateChange(msg.message.callId,'OFFER_ACCEPTED')
             establishCall(clientSockets,msg.message)
         }
         if(msg.topic == "user-online"){
@@ -87,6 +88,10 @@ app.ws('/:userId', async (ws: any, req: any) => {
         }
         if(msg.topic == "candidate"){
             handleCandidateChange(msg.message)
+        }
+        if(msg.topic == "ready"){
+            callStateChange(msg.message.callId,"CALL_STARTED")
+            handleCallStart(msg.message)
         }
         
         
@@ -102,6 +107,34 @@ app.ws('/:userId', async (ws: any, req: any) => {
     })
 })
 
+const newCall = (message:any) =>{
+    const callId = uuidv4()
+    calls[callId] = {
+        callId:callId,
+        partitipants:[message.origin,message.target],
+        origin:message.originm,
+        target:message.target,
+        state:'INITIAL_OFFER'
+    }
+    return callId
+}
+
+const callStateChange = (callId:string,newState:string) =>{
+    calls[callId].state = newState
+    if(newState=="CALL_STARTED"){
+        calls[callId].call_start_timestamp = new Date().toISOString()
+    }
+}
+
+const handleCallStart = (message:any) =>{
+    const callToStart = calls[message.callId]
+    
+    //@ts-ignore
+    callToStart.partitipants.map(partitipant =>{
+        const client = clientSockets[partitipant]
+        client.ws.send(JSON.stringify({topic:'call_started',call:calls[message.callId]}))
+    })
+}
 const handleCandidateChange = (message:any) =>{
     forEachClient(clientSockets, (client, i, arr) => {
         client.ws.send(JSON.stringify({topic:'server_candidate',candidate:message.candidate}))
@@ -110,25 +143,20 @@ const handleCandidateChange = (message:any) =>{
 
 const forEachClient = (clientSockets: ClientSockets, cb: (value: ClientSocket, index: number, array: ClientSocket[]) => any) => Object.values(clientSockets).forEach(cb)
 
-const handleNewOffer = (clientSockets: ClientSockets, message: any) => {
+const handleNewOffer = (clientSockets: ClientSockets, message: any,callId:string) => {
     forEachClient(clientSockets, (client, i, arr) => {
         
-        console.log(message)
-        console.log(message.target)
         if (client.uid != message.target) return;
-        const callId = uuidv4()
+
         message.callId = callId
         const newOffer = {
-            callId:uuidv4(),
+            callId:callId,
             origin: message.origin,
             target: message.target,
             offer:message.offer,
             time: new Date().toISOString(),
         }
-        calls[callId] = {
-            callId:callId
-        }
-        console.log(newOffer)
+        
         client.ws.send(JSON.stringify({topic:'incoming_offer',message:newOffer}))
     })
 }
@@ -146,7 +174,8 @@ const establishCall = (clientSockets:ClientSockets,message:any) => {
        
         const newAnswer = {
             answer:message.answer,
-            origin:message.origin
+            origin:message.origin,
+            callId:message.callId
         }
         //console.log(newAnswer)
         client.ws.send(JSON.stringify({topic:'incoming_answer',message:newAnswer}))

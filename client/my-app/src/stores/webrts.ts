@@ -8,7 +8,8 @@ export class WebRtc {
     ws: any = null
     isConnected: boolean = false;
 
-    incomingOffer: any = null
+    incomingCalls: Record<string, any> = {}
+    onGoingCall:any = null
 
     peerConnection: RTCPeerConnection = null
 
@@ -16,7 +17,6 @@ export class WebRtc {
     Send_dataChannel: any = null
     Receive_dataChannel: any = null
     userId: string = null
-    incomingCall: Record<string, CallModel> = {};
     onlineUsers: Record<string, boolean> = {}
     receivingStream: any = null
 
@@ -54,7 +54,7 @@ export class WebRtc {
                     const parseData = JSON.parse(event.data)
                     if (parseData) {
                         if (parseData.topic == "incoming_offer") {
-                            this.incomingCall[parseData.message?.callId] = parseData.message
+                
                             onOffer(parseData.message)
                         }
                         if (parseData.topic == "user-online") {
@@ -66,6 +66,11 @@ export class WebRtc {
                         if (parseData.topic == "server_candidate") {
                             console.log(parseData)
                             onCandidate(parseData.candidate)
+                        }
+                        if(parseData.topic == "call_started"){
+                            console.log("call started*****************")
+                            console.log(parseData)
+                            this.onGoingCall = parseData.message.call
                         }
 
                     }
@@ -174,17 +179,19 @@ export async function creatingOffer(targetId) {
 function onOffer(offer) {
 
     console.log("somebody wants to call us");
-    webRtcStore.incomingOffer = offer;
+    console.log(offer,offer.offer)
+    webRtcStore.incomingCalls[offer.callId] = offer;
     /*create a popup to accept/reject room request*/
 }
 
 export function creatingAnswer(originalCaller, callId) {
-    //console.log(webRtcStore.incomingOffer)
+    //console.log(webRtcStore.incomingCalls)
     //create RTC peer connection from receive end
     createWebrtcIntialConnection()
     //create a data channel bind
     webRtcStore.peerConnection.ondatachannel = receiveChannelCallback;
-    webRtcStore.peerConnection.setRemoteDescription(webRtcStore.incomingOffer.offer)
+    console.log(webRtcStore.incomingCalls,callId)
+    webRtcStore.peerConnection.setRemoteDescription(webRtcStore.incomingCalls[callId].offer)
         .then(() => webRtcStore.peerConnection.createAnswer())
         .then(function (answer) {
             //console.log(answer)
@@ -205,7 +212,7 @@ export function creatingAnswer(originalCaller, callId) {
 function onAnswer(answer) {
     console.log("when another user answers to  offer")
     webRtcStore.peerConnection.setRemoteDescription(answer.answer);
-    webRtcStore.sendMessage('ready', {});
+    webRtcStore.sendMessage('ready', {callId:answer.callId,user:webRtcStore.userId,state:'ENTERING_CALL'});
 
     //console.log(toJS(webRtcStore.peerConnection))
 }
