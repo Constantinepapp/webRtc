@@ -12,11 +12,13 @@ export class WebRtc {
 
     peerConnection: RTCPeerConnection = null
 
+    currentUserStream: any = null
     Send_dataChannel: any = null
     Receive_dataChannel: any = null
     userId: string = null
     incomingCall: Record<string, CallModel> = {};
     onlineUsers: Record<string, boolean> = {}
+    receivingStream: any = null
 
     constructor() {
         makeAutoObservable(this);
@@ -52,23 +54,24 @@ export class WebRtc {
                     const parseData = JSON.parse(event.data)
                     if (parseData) {
                         if (parseData.topic == "incoming_offer") {
-                            console.log(parseData.message)
-                            this.incomingCall[parseData.callId] = parseData.message
+                            this.incomingCall[parseData.message?.callId] = parseData.message
                             onOffer(parseData.message)
                         }
                         if (parseData.topic == "user-online") {
                             storeOnlineUsers(parseData.message.onlineUsers)
                         }
                         if (parseData.topic == 'incoming_answer') {
-                            console.log("i am here")
                             onAnswer(parseData.message)
+                        }
+                        if (parseData.topic == "server_candidate") {
+                            console.log(parseData)
+                            onCandidate(parseData.candidate)
                         }
 
                     }
                 } catch (error) {
                     //console.log(error);
                 }
-                console.log(toJS(this.incomingCall))
             });
             ws.addEventListener('error', (event) => {
                 //console.log('WebSocket error: ', event);
@@ -96,7 +99,22 @@ export class WebRtc {
     }
 }
 
-
+async function onCandidate(candidate) {
+    console.log("received candidate ->", candidate)
+    try {
+        const peerConnection = webRtcStore.peerConnection
+        await (peerConnection.addIceCandidate(candidate));
+        onAddIceCandidateSuccess(peerConnection);
+    } catch (e) {
+        onAddIceCandidateError(webRtcStore.peerConnection, e);
+    }
+}
+function onAddIceCandidateSuccess(pc) {
+    console.log(` IceCandidate added successfully..`);
+}
+function onAddIceCandidateError(pc, error) {
+    console.log(` Failed to add ICE Candidate: ${error.toString()}`);
+}
 function createWebrtcIntialConnection() {
     //ICE server
     var configuration = {
@@ -120,9 +138,16 @@ function createWebrtcIntialConnection() {
 
 }
 
+const offerOptions = {
+    offerToReceiveAudio: 1,
+    offerToReceiveVideo: 1
+};
+
+
 export async function creatingOffer(targetId) {
     try {
-        const offer = await webRtcStore.peerConnection.createOffer({ iceRestart: true });
+        //@ts-ignore
+        const offer = await webRtcStore.peerConnection.createOffer(offerOptions);
         await webRtcStore.peerConnection.setLocalDescription(offer);
 
         console.log("creating offer ---");
@@ -138,27 +163,33 @@ export async function creatingOffer(targetId) {
     }
 }
 
+// function hasRTCPeerConnection() {
+//     window.RTCPeerConnection = window.RTCPeerConnection || window.RTCPeerConnection || window.RTCPeerConnection;
+//     window.RTCSessionDescription = window.RTCSessionDescription || window.RTCSessionDescription || window.RTCSessionDescription;
+//     window.RTCIceCandidate = window.RTCIceCandidate || window.RTCIceCandidate || window.RTCIceCandidate;
+
+//     return !!window.RTCPeerConnection;
+// };
 
 function onOffer(offer) {
 
-    console.log("somebody wants to call us  => offer = " + offer);
+    console.log("somebody wants to call us");
     webRtcStore.incomingOffer = offer;
     /*create a popup to accept/reject room request*/
 }
 
 export function creatingAnswer(originalCaller, callId) {
-    console.log(webRtcStore.incomingOffer)
+    //console.log(webRtcStore.incomingOffer)
     //create RTC peer connection from receive end
     createWebrtcIntialConnection()
     //create a data channel bind
     webRtcStore.peerConnection.ondatachannel = receiveChannelCallback;
-    console.log(webRtcStore.incomingOffer.offer)
-    webRtcStore.peerConnection.setRemoteDescription(new RTCSessionDescription(webRtcStore.incomingOffer.offer))
+    webRtcStore.peerConnection.setRemoteDescription(webRtcStore.incomingOffer.offer)
         .then(() => webRtcStore.peerConnection.createAnswer())
         .then(function (answer) {
-            console.log(answer)
+            //console.log(answer)
             webRtcStore.peerConnection.setLocalDescription(answer);
-            console.log("creating answer  => answer = " + webRtcStore.peerConnection.localDescription);
+            //console.log("creating answer  => answer = " + webRtcStore.peerConnection.localDescription);
             webRtcStore.sendMessage('client_answer_to_offer', {
                 target: originalCaller,
                 origin: webRtcStore.userId,
@@ -172,11 +203,11 @@ export function creatingAnswer(originalCaller, callId) {
 }
 
 function onAnswer(answer) {
-    console.log("when another user answers to  offer => answer = " + answer);
-    webRtcStore.peerConnection.setRemoteDescription(new RTCSessionDescription(answer.answer));
-    webRtcStore.sendMessage('ready',{});
+    console.log("when another user answers to  offer")
+    webRtcStore.peerConnection.setRemoteDescription(answer.answer);
+    webRtcStore.sendMessage('ready', {});
 
-    console.log(toJS(webRtcStore.peerConnection))
+    //console.log(toJS(webRtcStore.peerConnection))
 }
 
 var receiveChannelCallback = function (event) {
@@ -211,10 +242,8 @@ function icecandidateAdded(ev, userId) {
     console.log("ICE candidate = " + ev.candidate);
     if (ev.candidate) {
         webRtcStore.sendMessage("candidate", {
-            message: {
-                origin: userId,
-                candidate: ev.candidate
-            }
+            origin: userId,
+            candidate: ev.candidate
         });
     }
 };
