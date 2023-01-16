@@ -9,19 +9,30 @@ const App = observer(function App() {
 
 
   const [targetUser, setTargetUser] = useState(null)
+  useEffect(() => {
 
+
+    // fetch("/api").then(res => res.json())
+    // .then(json=>console.log(json))
+    // .catch(err => { console.error(err) });
+
+  }, [])
+
+  const incomingCall = false
 
   useEffect(() => {
+    //console.log(webRtcStore.peerConnection)
     if (webRtcStore.peerConnection) {
       const peerConnection = webRtcStore.peerConnection
       const stream = webRtcStore.currentUserStream
-      stream.getTracks().forEach(track => {webRtcStore.peerConnection?.addTrack(track, stream) })
+      stream.getTracks().forEach(track => { console.log(track); webRtcStore.peerConnection?.addTrack(track, stream) })
     }
   }, [webRtcStore.peerConnection])
 
 
   const startCall = () => {
     creatingOffer(targetUser)
+    //webRtcStore.sendMessage('connection-start',{ message: `i am user ${webRtcStore.userId} and i call ${targetUser}`, topic: 'connection-start', target: targetUser, origin: webRtcStore.userId })
   }
 
   const changeUserid = (id) => {
@@ -55,6 +66,8 @@ const App = observer(function App() {
 })
 
 const IncomingCall = ({ call }) => {
+  console.log(toJS(webRtcStore.incomingCall))
+  console.log(call)
   const answerCall = (call: CallModel) => {
     creatingAnswer(call.origin, call.callId)
   }
@@ -81,9 +94,9 @@ const VideoStreamPeer = observer(() => {
   }, [webRtcStore.peerConnection])
 
   const videoRefPeer = useRef(null)
-
+  console.log("2")
   if (remoteStream && videoRefPeer.current) {
-   
+    console.log(remoteStream)
     videoRefPeer.current.srcObject = remoteStream
   }
 
@@ -104,10 +117,10 @@ const VideoStream = () => {
 
   const mediaDevices = useRef(null)
 
+
   useEffect(() => {
     if (videoRef.current) {
       try{
-       
         getVideo();
       }
       catch(e){
@@ -120,7 +133,7 @@ const VideoStream = () => {
   const getVideo = async () => {
     let mediaDevicesObj = navigator?.mediaDevices as any
     mediaDevicesObj
-      .getUserMedia({
+      ?.getUserMedia({
         video: {
           width: 500,
           facingMode: {
