@@ -40,14 +40,12 @@ export class WebRtc {
             if (!this.userId) {
                 return
             }
-            console.log(this.userId)
             const ws = new WebSocket('ws://' + 'localhost' + ':' + '5000/' + this.userId);
 
             ws.addEventListener('open', (event) => {
                 this.isConnected = true;
                 this.ws = ws
                 this.sendMessage('user-online', { userId: this.userId })
-                createWebrtcIntialConnection()
             });
             ws.addEventListener('message', (event) => {
                 try {
@@ -64,13 +62,20 @@ export class WebRtc {
                             onAnswer(parseData.message)
                         }
                         if (parseData.topic == "server_candidate") {
-                            console.log(parseData)
                             onCandidate(parseData.candidate)
                         }
                         if(parseData.topic == "call_started"){
-                            console.log("call started*****************")
                             console.log(parseData)
-                            this.onGoingCall = parseData.message.call
+                            this.onGoingCall = parseData.call
+                            console.log(this.onGoingCall)
+                        }
+                        if(parseData.topic == "call_ended"){
+                            if(this.onGoingCall.callId == parseData.callId){
+                                this.onGoingCall = null
+                            }
+                        
+                            this.peerConnection.close()
+                            this.peerConnection = null
                         }
 
                     }
@@ -83,7 +88,6 @@ export class WebRtc {
                 this.isConnected = false
             });
             ws.addEventListener('close', (event) => {
-                console.log(event)
                 if (event.code != 1000) {
                     this.isConnected = false
                     console.log('WebSocket closed: ', event);
@@ -100,12 +104,21 @@ export class WebRtc {
     }
 
     gotMessage(message: any) {
-        console.log(message)
+        //console.log(message)
+    }
+
+
+
+    endOngoingCall(){
+        webRtcStore.sendMessage('end_call', {
+            origin: webRtcStore.userId,
+            callId:webRtcStore.onGoingCall.callId
+        });
     }
 }
 
 async function onCandidate(candidate) {
-    console.log("received candidate ->", candidate)
+    console.log("-- new received candidate ")
     try {
         const peerConnection = webRtcStore.peerConnection
         await (peerConnection.addIceCandidate(candidate));
@@ -115,10 +128,10 @@ async function onCandidate(candidate) {
     }
 }
 function onAddIceCandidateSuccess(pc) {
-    console.log(` IceCandidate added successfully..`);
+    console.log(`-- IceCandidate added successfully..`);
 }
 function onAddIceCandidateError(pc, error) {
-    console.log(` Failed to add ICE Candidate: ${error.toString()}`);
+    console.log(`-- Failed to add ICE Candidate: ${error.toString()}`);
 }
 function createWebrtcIntialConnection() {
     //ICE server
@@ -151,12 +164,13 @@ const offerOptions = {
 
 export async function creatingOffer(targetId) {
     try {
+        createWebrtcIntialConnection()
         //@ts-ignore
         const offer = await webRtcStore.peerConnection.createOffer(offerOptions);
         await webRtcStore.peerConnection.setLocalDescription(offer);
 
-        console.log("creating offer ---");
-        console.log("offer = " + webRtcStore.peerConnection.localDescription);
+        console.log("-- creating offer");
+        //console.log("offer = " + webRtcStore.peerConnection.localDescription);
         webRtcStore.sendMessage('new_offer', {
             origin: webRtcStore.userId,
             target: targetId,
@@ -178,8 +192,7 @@ export async function creatingOffer(targetId) {
 
 function onOffer(offer) {
 
-    console.log("somebody wants to call us");
-    console.log(offer,offer.offer)
+    console.log("--somebody wants to call us");
     webRtcStore.incomingCalls[offer.callId] = offer;
     /*create a popup to accept/reject room request*/
 }
@@ -190,7 +203,7 @@ export function creatingAnswer(originalCaller, callId) {
     createWebrtcIntialConnection()
     //create a data channel bind
     webRtcStore.peerConnection.ondatachannel = receiveChannelCallback;
-    console.log(webRtcStore.incomingCalls,callId)
+    //console.log(webRtcStore.incomingCalls,callId)
     webRtcStore.peerConnection.setRemoteDescription(webRtcStore.incomingCalls[callId].offer)
         .then(() => webRtcStore.peerConnection.createAnswer())
         .then(function (answer) {
@@ -206,11 +219,13 @@ export function creatingAnswer(originalCaller, callId) {
         })
         .catch(function (err) {
             console.log(err.name + ': ' + err.message, " failed");
-        });
+        }).finally( ()=>
+            delete webRtcStore.incomingCalls[callId]
+        )
 }
 
 function onAnswer(answer) {
-    console.log("when another user answers to  offer")
+    console.log("--user answered")
     webRtcStore.peerConnection.setRemoteDescription(answer.answer);
     webRtcStore.sendMessage('ready', {callId:answer.callId,user:webRtcStore.userId,state:'ENTERING_CALL'});
 
@@ -246,7 +261,7 @@ export const webRtcStore = new WebRtc()
 
 
 function icecandidateAdded(ev, userId) {
-    console.log("ICE candidate = " + ev.candidate);
+    console.log("-- new ICE candidate");
     if (ev.candidate) {
         webRtcStore.sendMessage("candidate", {
             origin: userId,

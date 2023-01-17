@@ -72,9 +72,8 @@ app.ws('/:userId', async (ws: any, req: any) => {
 
     ws.on('message', (data: any) => {
         const msg = JSON.parse(data)
-        // if (msg.topic == "connection-start") {
-        //     sendOffer(clientSockets,msg.message)
-        // }
+        
+        //SIGNALING SERVER
         if(msg.topic == 'new_offer'){
             const callId = newCall(msg.message)
             handleNewOffer(clientSockets,msg.message,callId)
@@ -94,7 +93,12 @@ app.ws('/:userId', async (ws: any, req: any) => {
             handleCallStart(msg.message)
         }
         
-        
+        //CALL FUNCTIONS
+        if(msg.topic == "end_call"){
+            const callId = msg.message.callId
+            const userId = msg.message.origin
+            endCall(callId,userId)
+        }
     })
 
     ws.on('close', (ws: any) => {
@@ -106,6 +110,8 @@ app.ws('/:userId', async (ws: any, req: any) => {
         disconnectWS(clientSockets, userId)
     })
 })
+
+
 
 const newCall = (message:any) =>{
     const callId = uuidv4()
@@ -119,10 +125,29 @@ const newCall = (message:any) =>{
     return callId
 }
 
+
+const endCall = (callId:string,userId:string) =>{
+    const call = calls[callId]
+    console.log("call ->",call)
+    for(let partitipant of call.partitipants){
+        console.log("partitipant =>",partitipant)
+        if(call.state != 'CALL_ENDED'){
+            console.log("state ->",call.state)
+            const client = clientSockets[partitipant]
+            console.log("clinet ->",client)
+            client.ws.send(JSON.stringify({topic:'call_ended',callId:callId,origin:userId}))
+            callStateChange(callId,"CALL_ENDED")
+        }
+    }
+}
+
 const callStateChange = (callId:string,newState:string) =>{
     calls[callId].state = newState
     if(newState=="CALL_STARTED"){
         calls[callId].call_start_timestamp = new Date().toISOString()
+    }
+    if(newState == "CALL_ENDED"){
+        calls[callId].call_end_timestamp = new Date().toISOString()
     }
 }
 
@@ -169,7 +194,7 @@ const iceCandidate = (clientSockets:ClientSockets,message:any) =>{
 const establishCall = (clientSockets:ClientSockets,message:any) => {
     forEachClient(clientSockets, (client, i, arr) => {
         
-        console.log(client.uid,message)
+        // console.log(client.uid,message)
         if (client.uid != message.target) return;
        
         const newAnswer = {

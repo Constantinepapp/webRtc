@@ -18,14 +18,14 @@ const App = observer(function App() {
 
   }, [])
 
-  const incomingCall = false
+  console.log(webRtcStore.onGoingCall)
 
   useEffect(() => {
     //console.log(webRtcStore.peerConnection)
     if (webRtcStore.peerConnection) {
       const peerConnection = webRtcStore.peerConnection
       const stream = webRtcStore.currentUserStream
-      stream.getTracks().forEach(track => { console.log(track); webRtcStore.peerConnection?.addTrack(track, stream) })
+      stream.getTracks().forEach(track => { webRtcStore.peerConnection?.addTrack(track, stream) })
     }
   }, [webRtcStore.peerConnection])
 
@@ -45,7 +45,7 @@ const App = observer(function App() {
           <VideoStream />
           <VideoStreamPeer />
         </div>
-        <p>Online Users : 
+        <p>Online Users :
           <div style={{ display: 'flex' }}>{Object.keys(webRtcStore.onlineUsers).map(key => (
             <>
               <p>User:{key}</p>
@@ -53,7 +53,9 @@ const App = observer(function App() {
 
           ))}</div>
         </p>
-
+        {webRtcStore.onGoingCall &&
+          <CallInfo />
+        }
         <label>Origin</label>
         <input value={webRtcStore.userId} onChange={e => changeUserid(e.target.value)} />
         <label>Target</label>
@@ -70,9 +72,39 @@ const App = observer(function App() {
   );
 })
 
+
+const CallInfo = () => {
+
+  const [timer, setTimer] = useState("0")
+  const timerInterval = useRef(null)
+
+  useEffect(() => {
+    timerInterval.current = setInterval(() => {
+      console.log("interval", new Date().getTime(), new Date(webRtcStore.onGoingCall.call_start_timestamp).getTime())
+      setTimer(((new Date().getTime() - new Date(webRtcStore.onGoingCall.call_start_timestamp).getTime()) / 1000).toFixed(0))
+      
+    }, 1000)
+
+    return (() => {
+      if (timerInterval.current) {
+        clearInterval(timerInterval.current)
+      }
+    })
+  }, [])
+
+  const endCall = () =>{
+    webRtcStore.endOngoingCall()
+  }
+  return (
+    <>
+      <label>On Call : {timer} secs</label>
+      <button onClick={endCall}>End call</button>
+
+    </>
+  )
+}
+
 const IncomingCall = ({ call }) => {
-  console.log(toJS(webRtcStore.incomingCalls))
-  console.log(call)
   const answerCall = (call: CallModel) => {
     creatingAnswer(call.origin, call.callId)
   }
@@ -99,9 +131,7 @@ const VideoStreamPeer = observer(() => {
   }, [webRtcStore.peerConnection])
 
   const videoRefPeer = useRef(null)
-  console.log("2")
   if (remoteStream && videoRefPeer.current) {
-    console.log(remoteStream)
     videoRefPeer.current.srcObject = remoteStream
   }
 
@@ -139,6 +169,7 @@ const VideoStream = () => {
     let mediaDevicesObj = navigator?.mediaDevices as any
     mediaDevicesObj
       ?.getUserMedia({
+        audio: false,
         video: {
           width: 500,
           facingMode: {
