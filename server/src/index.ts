@@ -116,7 +116,7 @@ const startWebSocketInterval = (userId:string) =>{
 
 const clearUserInterval = (userId:string) =>{
     const clientSocket = clientSockets[userId]
-    if(clientSocket.intervalID){
+    if(clientSocket?.intervalID){
         clearInterval(clientSocket.intervalID)
         clientSocket.intervalID = null
     }

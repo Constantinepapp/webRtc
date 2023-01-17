@@ -38,7 +38,9 @@ export class WebRtc {
     }
     initWebSocket = () => {
         try {
-
+            const flag = localStorage.getItem("flag")
+            console.log(flag)
+            const remoteServer = flag == "remote" ? "192.168.101.143" : 'localhost'
             setInterval(() => {
                 if (this.isConnected) {
                     this.sendMessage("ping",{userId:this.userId})
@@ -48,7 +50,7 @@ export class WebRtc {
             if (!this.userId) {
                 return
             }
-            const ws = new WebSocket('ws://' + 'localhost' + ':' + '5000/' + this.userId);
+            const ws = new WebSocket('ws://' + remoteServer + ':' + '5000/' + this.userId);
 
             ws.addEventListener('open', (event) => {
                 this.isConnected = true;
