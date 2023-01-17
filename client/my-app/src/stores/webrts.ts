@@ -4,6 +4,8 @@ import { makeAutoObservable, makeObservable } from 'mobx'
 import { toJS } from 'mobx';
 
 
+const KEEP_WS_ALIVE_INTERVAL = 20*1000
+const CHECK_CONNECTION_INTERVAL = 10*1000
 export class WebRtc {
     ws: any = null
     isConnected: boolean = false;
@@ -32,10 +34,16 @@ export class WebRtc {
             if (this.userId) {
                 if (!this.isConnected) { this.initWebSocket(); console.log('Connection Lost: trying to connect to server... ') }
             }
-        }, 3000);
+        }, CHECK_CONNECTION_INTERVAL);
     }
     initWebSocket = () => {
         try {
+
+            setInterval(() => {
+                if (this.isConnected) {
+                    this.sendMessage("ping",{userId:this.userId})
+                }
+            }, KEEP_WS_ALIVE_INTERVAL);
 
             if (!this.userId) {
                 return
@@ -65,15 +73,14 @@ export class WebRtc {
                             onCandidate(parseData.candidate)
                         }
                         if(parseData.topic == "call_started"){
-                            console.log(parseData)
                             this.onGoingCall = parseData.call
                             console.log(this.onGoingCall)
                         }
                         if(parseData.topic == "call_ended"){
+                            console.log("stop call ***********")
                             if(this.onGoingCall.callId == parseData.callId){
                                 this.onGoingCall = null
                             }
-                        
                             this.peerConnection.close()
                             this.peerConnection = null
                         }

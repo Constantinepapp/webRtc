@@ -3,6 +3,7 @@ import { Router } from "express"
 import { v4 as uuidv4 } from 'uuid';
 import { WebSocket } from "ws";
 import { json } from "body-parser";
+import { start } from "repl";
 
 require('dotenv').config()
 
@@ -45,33 +46,25 @@ app.get("/api", (req: any, res: any) => {
 var clientSockets = {} as ClientSockets
 // const clientToClientCalls = {} as Record<Calls>
 var calls = {} as Record<string, any>
-let checkConnectionInterval:any = null
 
-type CallModel = {
-    callId: string,
-    origin: string,
-    target: string,
-    time: string,
-    onGoingCall: boolean,
-    answerPending: boolean
-}
+const KEEP_CONNECTION_ALIVE_INTERVAL = 1000 * 60
+
 
 app.ws('/:userId', async (ws: any, req: any) => {
     const userId = req.params.userId
     console.log("connect : ",userId)
     clientSockets[userId] = { ws, uid: userId, lastTimeOfCommunication: Date.now(), intervalID: null }
     
-   
-    // const clientSocket = clientSockets[userId]
-    // clientSocket.intervalID = setInterval(() => {
-    //     const diff = Date.now() - clientSocket.lastTimeOfCommunication
-    //     if (diff >= timeout) {
-    //         disconnectWS(clientSockets,userId)
-    //     }
-    // }, 1000 * 10)
+    startWebSocketInterval(userId)
 
     ws.on('message', (data: any) => {
         const msg = JSON.parse(data)
+
+        //WEBSOCKET
+        if(msg.topic == "ping"){
+            const userId = msg.message.userId
+            restartActivityInterval(userId)
+        }
         
         //SIGNALING SERVER
         if(msg.topic == 'new_offer'){
@@ -102,14 +95,36 @@ app.ws('/:userId', async (ws: any, req: any) => {
     })
 
     ws.on('close', (ws: any) => {
-        disconnectWS(clientSockets, userId)
+        disconnectWS(clientSockets, userId,'Socket close')
     });
 
     ws.on('error', (e: any) => {
         console.error(e);
-        disconnectWS(clientSockets, userId)
+        disconnectWS(clientSockets, userId,'Error')
     })
 })
+
+const startWebSocketInterval = (userId:string) =>{
+    const clientSocket = clientSockets[userId]
+    clientSocket.intervalID = setInterval(() => {
+        const diff = Date.now() - clientSocket.lastTimeOfCommunication
+        if (diff >= timeout) {
+            disconnectWS(clientSockets,userId,'Inactivity')
+        }
+    }, KEEP_CONNECTION_ALIVE_INTERVAL)
+}
+
+const clearUserInterval = (userId:string) =>{
+    const clientSocket = clientSockets[userId]
+    if(clientSocket.intervalID){
+        clearInterval(clientSocket.intervalID)
+        clientSocket.intervalID = null
+    }
+}
+const restartActivityInterval = (userId:string) =>{
+    clearUserInterval(userId)
+    startWebSocketInterval(userId)
+}
 
 
 
@@ -128,17 +143,13 @@ const newCall = (message:any) =>{
 
 const endCall = (callId:string,userId:string) =>{
     const call = calls[callId]
-    console.log("call ->",call)
     for(let partitipant of call.partitipants){
-        console.log("partitipant =>",partitipant)
         if(call.state != 'CALL_ENDED'){
-            console.log("state ->",call.state)
             const client = clientSockets[partitipant]
-            console.log("clinet ->",client)
             client.ws.send(JSON.stringify({topic:'call_ended',callId:callId,origin:userId}))
-            callStateChange(callId,"CALL_ENDED")
         }
     }
+    callStateChange(callId,"CALL_ENDED")
 }
 
 const callStateChange = (callId:string,newState:string) =>{
@@ -223,10 +234,11 @@ const refreshOnlineUsers = () =>{
 const timeout = 10 * 1000
 
 
-const disconnectWS = (clientSockets: ClientSockets, id: string) => {
+const disconnectWS = (clientSockets: ClientSockets, id: string,cause:string) => {
     const clientSocket = clientSockets[id]
-    console.log("disconect : ",id)
+    console.log(`disconect : ${id} (${cause})`,)
     if (clientSocket) {
+        clientSocket.ws.close()
         clearInterval(clientSockets[id].intervalID)
         delete clientSockets[id]
     }
