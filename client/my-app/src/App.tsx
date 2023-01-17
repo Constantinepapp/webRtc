@@ -21,13 +21,15 @@ const App = observer(function App() {
   console.log(webRtcStore.onGoingCall)
 
   useEffect(() => {
-    //console.log(webRtcStore.peerConnection)
+    console.log(webRtcStore.currentUserStream)
+    console.log(webRtcStore.peerConnection)
     if (webRtcStore.peerConnection) {
+      console.log("2")
       const peerConnection = webRtcStore.peerConnection
       const stream = webRtcStore.currentUserStream
-      stream.getTracks().forEach(track => { webRtcStore.peerConnection?.addTrack(track, stream) })
+      stream.getTracks().forEach(track => { console.log("3"); webRtcStore.peerConnection?.addTrack(track, stream) })
     }
-  }, [webRtcStore.peerConnection])
+  }, [webRtcStore.peerConnection, webRtcStore.currentUserStream])
 
 
   const startCall = () => {
@@ -80,9 +82,7 @@ const CallInfo = () => {
 
   useEffect(() => {
     timerInterval.current = setInterval(() => {
-      console.log("interval", new Date().getTime(), new Date(webRtcStore.onGoingCall.call_start_timestamp).getTime())
       setTimer(((new Date().getTime() - new Date(webRtcStore.onGoingCall.call_start_timestamp).getTime()) / 1000).toFixed(0))
-      
     }, 1000)
 
     return (() => {
@@ -92,14 +92,13 @@ const CallInfo = () => {
     })
   }, [])
 
-  const endCall = () =>{
+  const endCall = () => {
     webRtcStore.endOngoingCall()
   }
   return (
     <>
       <label>On Call : {timer} secs</label>
       <button onClick={endCall}>End call</button>
-
     </>
   )
 }
@@ -120,9 +119,14 @@ const VideoStreamPeer = observer(() => {
 
   const [remoteStream, setRemoteStream] = useState(null)
   useEffect(() => {
-    //console.log(webRtcStore.peerConnection)
+    console.log("1")
+    console.log(webRtcStore.peerConnection)
     if (webRtcStore.peerConnection) {
+      console.log("2")
       webRtcStore.peerConnection.addEventListener('track', (e) => {
+        console.log("3")
+        console.log(e.streams)
+        console.log(e.streams?.length)
         if (remoteStream !== e.streams[0]) {
           setRemoteStream(e.streams[0])
         }
@@ -149,8 +153,22 @@ const VideoStreamPeer = observer(() => {
 
 const VideoStream = () => {
   const videoRef = useRef(null);
-
   const mediaDevices = useRef(null)
+
+  const [callState, setCallState] = useState({ audio: true, video: true })
+
+
+  const startStopTrack = async (trackType: "audio" | "video") => {
+    const stream = videoRef.current.srcObject
+    let newState
+    stream.getTracks().forEach(function (track) {
+      if (track.kind == trackType) {
+        track.enabled = !track.enabled
+        newState = track.enabled
+      }
+    })
+    setCallState({ ...callState, [trackType]: newState })
+  }
 
 
   useEffect(() => {
@@ -169,7 +187,7 @@ const VideoStream = () => {
     let mediaDevicesObj = navigator?.mediaDevices as any
     mediaDevicesObj
       ?.getUserMedia({
-        audio: false,
+        audio: true,
         video: {
           width: 500,
           facingMode: {
@@ -180,6 +198,7 @@ const VideoStream = () => {
       }
       )
       .then(stream => {
+        // console.log(stream)
         mediaDevices.current = stream
         let video = videoRef.current;
         //console.log(video)
@@ -202,6 +221,8 @@ const VideoStream = () => {
           autoPlay={true}
           className="playe1r"
         />
+        <button onClick={e => startStopTrack('audio')}>{callState.audio ? 'Mute' :'UnMute'}</button>
+        <button onClick={e => startStopTrack('video')}>{callState.video ? 'Stop' :'Start'}</button>
       </div>
     </div>
 
