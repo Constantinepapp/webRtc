@@ -7,8 +7,8 @@ import { toJS } from 'mobx';
 const KEEP_WS_ALIVE_INTERVAL = 20*1000
 const CHECK_CONNECTION_INTERVAL = 10*1000
 export class WebRtc {
-    ws: any = null
-    isConnected: boolean = false;
+    ws: WebSocket = null
+    isConnected: boolean = false;  //for websocket
 
     incomingCalls: Record<string, any> = {}
     onGoingCall:any = null
@@ -110,11 +110,6 @@ export class WebRtc {
         this.ws.send(payload)
     }
 
-    gotMessage(message: any) {
-        //console.log(message)
-    }
-
-
 
     endOngoingCall(){
         webRtcStore.sendMessage('end_call', {
@@ -154,7 +149,7 @@ async function createWebrtcIntialConnection() {
             }
         ]
     };
-    //navigator.mediaDevices.getUserMedia({audio: true, video: true});
+
     webRtcStore.peerConnection = new RTCPeerConnection(configuration);
     //when the browser finds an ice candidate we send it to another peer 
     webRtcStore.peerConnection.onicecandidate = (e) => icecandidateAdded(e, webRtcStore.userId);
@@ -177,7 +172,6 @@ export async function creatingOffer(targetId) {
         await webRtcStore.peerConnection.setLocalDescription(offer);
 
         console.log("-- creating offer");
-        //console.log("offer = " + webRtcStore.peerConnection.localDescription);
         webRtcStore.sendMessage('new_offer', {
             origin: webRtcStore.userId,
             target: targetId,
@@ -189,13 +183,6 @@ export async function creatingOffer(targetId) {
     }
 }
 
-// function hasRTCPeerConnection() {
-//     window.RTCPeerConnection = window.RTCPeerConnection || window.RTCPeerConnection || window.RTCPeerConnection;
-//     window.RTCSessionDescription = window.RTCSessionDescription || window.RTCSessionDescription || window.RTCSessionDescription;
-//     window.RTCIceCandidate = window.RTCIceCandidate || window.RTCIceCandidate || window.RTCIceCandidate;
-
-//     return !!window.RTCPeerConnection;
-// };
 
 function onOffer(offer) {
     console.log("--somebody wants to call us");
@@ -204,18 +191,12 @@ function onOffer(offer) {
 }
 
 export async function creatingAnswer(originalCaller, callId) {
-    //console.log(webRtcStore.incomingCalls)
-    //create RTC peer connection from receive end
     await createWebrtcIntialConnection()
-    //create a data channel bind
     webRtcStore.peerConnection.ondatachannel = receiveChannelCallback;
-    //console.log(webRtcStore.incomingCalls,callId)
     webRtcStore.peerConnection.setRemoteDescription(webRtcStore.incomingCalls[callId].offer)
         .then(() => webRtcStore.peerConnection.createAnswer())
         .then(function (answer) {
-            //console.log(answer)
             webRtcStore.peerConnection.setLocalDescription(answer);
-            //console.log("creating answer  => answer = " + webRtcStore.peerConnection.localDescription);
             webRtcStore.sendMessage('client_answer_to_offer', {
                 target: originalCaller,
                 origin: webRtcStore.userId,
@@ -234,8 +215,6 @@ function onAnswer(answer) {
     console.log("--user answered")
     webRtcStore.peerConnection.setRemoteDescription(answer.answer);
     webRtcStore.sendMessage('ready', {callId:answer.callId,user:webRtcStore.userId,state:'ENTERING_CALL'});
-
-    //console.log(toJS(webRtcStore.peerConnection))
 }
 
 var receiveChannelCallback = function (event) {
@@ -252,7 +231,6 @@ const storeOnlineUsers = (users) => {
         userIds[user] = true
         webRtcStore.onlineUsers[user] = true
     }
-
     for (let user of Object.keys(webRtcStore.onlineUsers)) {
         if (!userIds[user]) {
             delete webRtcStore.onlineUsers[user]
@@ -276,16 +254,15 @@ function icecandidateAdded(ev, userId) {
     }
 };
 var handlestatechangeCallback = function (event) {
-    /* if you want , use this function for webrtc state change event  */
     const state = webRtcStore.peerConnection.iceConnectionState;
     if (state === "failed" || state === "closed") {
-        /* handle state failed , closed */
+        
     } else if (state === "disconnected") {
-        /* handle state disconnected */
+        
     }
 };
 var handleonnegotiatioCallback = function (event) {
-    /* if you want , use this function for handleonnegotiatioCallback  */
+   
 };
 
 
@@ -306,25 +283,19 @@ var onReceive_ChannelOpenState = function (event) {
     console.log("dataChannel.OnOpen", event);
 
     if (webRtcStore.Receive_dataChannel?.readyState == "open") {
-        /* */
+        
     }
 };
-/**
- * This function will handle the data channel message callback.
- */
+
 var onReceive_ChannelMessageCallback = function (event) {
     console.log("dataChannel.OnMessage:", event);
-    //UpdateChatMessages(event.data, false);
+    
 };
-/**
- * This function will handle the data channel error callback.
- */
+
 var onReceive_ChannelErrorState = function (error) {
     console.log("dataChannel.OnError:", error);
 };
-/**
- * This function will handle the data channel close callback.
- */
+
 var onReceive_ChannelCloseStateChange = function (event) {
     console.log("dataChannel.OnClose", event);
 };
