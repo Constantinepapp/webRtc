@@ -133,7 +133,7 @@ function onAddIceCandidateSuccess(pc) {
 function onAddIceCandidateError(pc, error) {
     console.log(`-- Failed to add ICE Candidate: ${error.toString()}`);
 }
-function createWebrtcIntialConnection() {
+async function createWebrtcIntialConnection() {
     //ICE server
     var configuration = {
         "iceServers": [
@@ -164,7 +164,7 @@ const offerOptions = {
 
 export async function creatingOffer(targetId) {
     try {
-        createWebrtcIntialConnection()
+        await createWebrtcIntialConnection()
         //@ts-ignore
         const offer = await webRtcStore.peerConnection.createOffer(offerOptions);
         await webRtcStore.peerConnection.setLocalDescription(offer);
@@ -191,16 +191,15 @@ export async function creatingOffer(targetId) {
 // };
 
 function onOffer(offer) {
-
     console.log("--somebody wants to call us");
     webRtcStore.incomingCalls[offer.callId] = offer;
     /*create a popup to accept/reject room request*/
 }
 
-export function creatingAnswer(originalCaller, callId) {
+export async function creatingAnswer(originalCaller, callId) {
     //console.log(webRtcStore.incomingCalls)
     //create RTC peer connection from receive end
-    createWebrtcIntialConnection()
+    await createWebrtcIntialConnection()
     //create a data channel bind
     webRtcStore.peerConnection.ondatachannel = receiveChannelCallback;
     //console.log(webRtcStore.incomingCalls,callId)
