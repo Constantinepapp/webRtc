@@ -43,6 +43,7 @@ export class WebRtc {
             const flag = localStorage.getItem("flag")
             //console.log(flag)
             const remoteServer = flag == "remote" ? "192.168.101.143" : 'localhost'
+            console.log(remoteServer)
             setInterval(() => {
                 if (this.isConnected) {
                     this.sendMessage("ping", { userId: this.userId })
@@ -65,25 +66,25 @@ export class WebRtc {
                     if (parseData) {
                         if (parseData.topic == "incoming_offer") {
 
-                            onOffer(parseData.message)
+                            onOffer(parseData.data)
                         }
                         if (parseData.topic == "user-online") {
-                            storeOnlineUsers(parseData.message.onlineUsers)
+                            storeOnlineUsers(parseData.data.onlineUsers)
                         }
                         if (parseData.topic == 'incoming_answer') {
-                            onAnswer(parseData.message)
+                            onAnswer(parseData.data)
                         }
                         if (parseData.topic == "server_candidate") {
-                            onCandidate(parseData.candidate)
+                            onCandidate(parseData.data.candidate)
                         }
                         if (parseData.topic == "call_started") {
-                            delete this.incomingCalls[parseData.call?.callId]
-                            this.onGoingCall = parseData.call
+                            delete this.incomingCalls[parseData.data.call?.callId]
+                            this.onGoingCall = parseData.data.call
                             // console.log(this.onGoingCall)
                         }
                         if (parseData.topic == "call_ended") {
                             console.log("stop call ***********")
-                            if (this.onGoingCall.callId == parseData.callId) {
+                            if (this.onGoingCall.callId == parseData.data.callId) {
                                 this.onGoingCall = null
                             }
                             this.peerConnection.close()
@@ -111,8 +112,8 @@ export class WebRtc {
         }
     }
 
-    sendMessage(topic: string, message) {
-        const payload = JSON.stringify({ topic, message })
+    sendMessage(topic: string, data) {
+        const payload = JSON.stringify({ topic, data })
         this.ws.send(payload)
     }
 

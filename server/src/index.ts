@@ -43,35 +43,36 @@ app.ws('/:userId', async (ws: any, req: any) => {
 
         //WEBSOCKET
         if(msg.topic == "ping"){
-            const userId = msg.message.userId
+            const userId = msg.data.userId
             restartActivityInterval(userId)
         }
         
         //SIGNALING SERVER
         if(msg.topic == 'new_offer'){
-            const callId = newCall(msg.message)
-            handleNewOffer(clientSockets,msg.message,callId)
+            const callId = newCall(msg.data)
+            handleNewOffer(clientSockets,msg.data,callId)
         }
         if (msg.topic == 'client_answer_to_offer') {
-            callStateChange(msg.message.callId,'OFFER_ACCEPTED')
-            establishCall(clientSockets,msg.message)
+            callStateChange(msg.data.callId,'OFFER_ACCEPTED')
+            establishCall(clientSockets,msg.data)
         }
         if(msg.topic == "user-online"){
             refreshOnlineUsers()
         }
         if(msg.topic == "candidate"){
-            handleCandidateChange(msg.message)
+            handleCandidateChange(msg.data)
         }
         if(msg.topic == "ready"){
-            callStateChange(msg.message.callId,"CALL_STARTED")
-            handleCallStart(msg.message)
+            callStateChange(msg.data.callId,"CALL_STARTED")
+            handleCallStart(msg.data)
         }
         
         //CALL FUNCTIONS
         if(msg.topic == "end_call"){
-            const callId = msg.message.callId
-            const userId = msg.message.origin
+            const callId = msg.data.callId
+            const userId = msg.data.origin
             endCall(callId,userId)
+            console.log(calls)
         }
     })
 
@@ -87,6 +88,9 @@ app.ws('/:userId', async (ws: any, req: any) => {
 
 const startWebSocketInterval = (userId:string) =>{
     const clientSocket = clientSockets[userId]
+    if(!clientSocket){
+        return 
+    }
     clientSocket.intervalID = setInterval(() => {
         const diff = Date.now() - clientSocket.lastTimeOfCommunication
         if (diff >= timeout) {
@@ -109,13 +113,13 @@ const restartActivityInterval = (userId:string) =>{
 
 
 
-const newCall = (message:any) =>{
+const newCall = (data:any) =>{
     const callId = uuidv4()
     calls[callId] = {
         callId:callId,
-        partitipants:[message.origin,message.target],
-        origin:message.originm,
-        target:message.target,
+        partitipants:[data.origin,data.target],
+        origin:data.origin,
+        target:data.target,
         state:'INITIAL_OFFER'
     }
     return callId
@@ -127,7 +131,7 @@ const endCall = (callId:string,userId:string) =>{
     for(let partitipant of call.partitipants){
         if(call.state != 'CALL_ENDED'){
             const client = clientSockets[partitipant]
-            client.ws.send(JSON.stringify({topic:'call_ended',callId:callId,origin:userId}))
+            client.ws.send(JSON.stringify({topic:'call_ended',data:{callId:callId,origin:userId}}))
         }
     }
     callStateChange(callId,"CALL_ENDED")
@@ -143,51 +147,51 @@ const callStateChange = (callId:string,newState:string) =>{
     }
 }
 
-const handleCallStart = (message:any) =>{
-    const callToStart = calls[message.callId]
+const handleCallStart = (data:any) =>{
+    const callToStart = calls[data.callId]
     //@ts-ignore
     callToStart.partitipants.map(partitipant =>{
         const client = clientSockets[partitipant]
-        client.ws.send(JSON.stringify({topic:'call_started',call:calls[message.callId]}))
+        client.ws.send(JSON.stringify({topic:'call_started',data:{call:calls[data.callId]}}))
     })
 }
-const handleCandidateChange = (message:any) =>{
+const handleCandidateChange = (data:any) =>{
     forEachClient(clientSockets, (client, i, arr) => {
-        client.ws.send(JSON.stringify({topic:'server_candidate',candidate:message.candidate}))
+        client.ws.send(JSON.stringify({topic:'server_candidate',data:{candidate:data.candidate}}))
     })
 }
 
 const forEachClient = (clientSockets: ClientSockets, cb: (value: ClientSocket, index: number, array: ClientSocket[]) => any) => Object.values(clientSockets).forEach(cb)
 
-const handleNewOffer = (clientSockets: ClientSockets, message: any,callId:string) => {
+const handleNewOffer = (clientSockets: ClientSockets, data: any,callId:string) => {
     forEachClient(clientSockets, (client, i, arr) => {
-        if (client.uid != message.target) return;
-        message.callId = callId
+        if (client.uid != data.target) return;
+        data.callId = callId
         const newOffer = {
             callId:callId,
-            origin: message.origin,
-            target: message.target,
-            offer:message.offer,
+            origin: data.origin,
+            target: data.target,
+            offer:data.offer,
             time: new Date().toISOString(),
         }
-        client.ws.send(JSON.stringify({topic:'incoming_offer',message:newOffer}))
+        client.ws.send(JSON.stringify({topic:'incoming_offer',data:newOffer}))
     })
 }
 
 
-const establishCall = (clientSockets:ClientSockets,message:any) => {
+const establishCall = (clientSockets:ClientSockets,data:any) => {
     forEachClient(clientSockets, (client, i, arr) => {
         
-        // console.log(client.uid,message)
-        if (client.uid != message.target) return;
+        // console.log(client.uid,data)
+        if (client.uid != data.target) return;
        
         const newAnswer = {
-            answer:message.answer,
-            origin:message.origin,
-            callId:message.callId
+            answer:data.answer,
+            origin:data.origin,
+            callId:data.callId
         }
         //console.log(newAnswer)
-        client.ws.send(JSON.stringify({topic:'incoming_answer',message:newAnswer}))
+        client.ws.send(JSON.stringify({topic:'incoming_answer',data:newAnswer}))
     })
  
     //console.log(`starting call between user ${call.origin} and ${call.target}`)
@@ -197,7 +201,7 @@ const refreshOnlineUsers = () =>{
     forEachClient(clientSockets, (client, i, arr) => {
         client.ws.send(JSON.stringify({
             topic:'user-online',
-            message:{
+            data:{
                 onlineUsers:Object.keys(clientSockets)
             }
         }))
