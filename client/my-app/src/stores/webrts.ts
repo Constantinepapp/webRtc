@@ -4,18 +4,20 @@ import { makeAutoObservable, makeObservable } from 'mobx'
 import { toJS } from 'mobx';
 
 
-const KEEP_WS_ALIVE_INTERVAL = 20*1000
-const CHECK_CONNECTION_INTERVAL = 10*1000
+const KEEP_WS_ALIVE_INTERVAL = 20 * 1000
+const CHECK_CONNECTION_INTERVAL = 10 * 1000
 export class WebRtc {
     ws: WebSocket = null
     isConnected: boolean = false;  //for websocket
 
     incomingCalls: Record<string, any> = {}
-    onGoingCall:any = null
+    onGoingCall: any = null
 
     peerConnection: RTCPeerConnection = null
-
     currentUserStream: any = null
+    currentUsermicrophoneAudioStream: any = null
+    connectionSenderVideo: any = null
+
     Send_dataChannel: any = null
     Receive_dataChannel: any = null
     userId: string = null
@@ -39,11 +41,11 @@ export class WebRtc {
     initWebSocket = () => {
         try {
             const flag = localStorage.getItem("flag")
-            console.log(flag)
+            //console.log(flag)
             const remoteServer = flag == "remote" ? "192.168.101.143" : 'localhost'
             setInterval(() => {
                 if (this.isConnected) {
-                    this.sendMessage("ping",{userId:this.userId})
+                    this.sendMessage("ping", { userId: this.userId })
                 }
             }, KEEP_WS_ALIVE_INTERVAL);
 
@@ -62,7 +64,7 @@ export class WebRtc {
                     const parseData = JSON.parse(event.data)
                     if (parseData) {
                         if (parseData.topic == "incoming_offer") {
-                
+
                             onOffer(parseData.message)
                         }
                         if (parseData.topic == "user-online") {
@@ -74,16 +76,18 @@ export class WebRtc {
                         if (parseData.topic == "server_candidate") {
                             onCandidate(parseData.candidate)
                         }
-                        if(parseData.topic == "call_started"){
+                        if (parseData.topic == "call_started") {
+                            delete this.incomingCalls[parseData.call?.callId]
                             this.onGoingCall = parseData.call
-                            console.log(this.onGoingCall)
+                            // console.log(this.onGoingCall)
                         }
-                        if(parseData.topic == "call_ended"){
+                        if (parseData.topic == "call_ended") {
                             console.log("stop call ***********")
-                            if(this.onGoingCall.callId == parseData.callId){
+                            if (this.onGoingCall.callId == parseData.callId) {
                                 this.onGoingCall = null
                             }
                             this.peerConnection.close()
+                            this.connectionSenderVideo = null
                             this.peerConnection = null
                         }
 
@@ -112,17 +116,16 @@ export class WebRtc {
         this.ws.send(payload)
     }
 
-
-    endOngoingCall(){
-        webRtcStore.sendMessage('end_call', {
-            origin: webRtcStore.userId,
-            callId:webRtcStore.onGoingCall.callId
+    endOngoingCall() {
+        this.sendMessage('end_call', {
+            origin: this.userId,
+            callId: this.onGoingCall.callId
         });
     }
 }
 
 async function onCandidate(candidate) {
-    console.log("-- new received candidate ")
+    //console.log("-- new received candidate ")
     try {
         const peerConnection = webRtcStore.peerConnection
         await (peerConnection.addIceCandidate(candidate));
@@ -132,10 +135,10 @@ async function onCandidate(candidate) {
     }
 }
 function onAddIceCandidateSuccess(pc) {
-    console.log(`-- IceCandidate added successfully..`);
+    //console.log(`-- IceCandidate added successfully..`);
 }
 function onAddIceCandidateError(pc, error) {
-    console.log(`-- Failed to add ICE Candidate: ${error.toString()}`);
+    //console.log(`-- Failed to add ICE Candidate: ${error.toString()}`);
 }
 async function createWebrtcIntialConnection() {
     //ICE server
@@ -207,8 +210,8 @@ export async function creatingAnswer(originalCaller, callId) {
             });
         })
         .catch(function (err) {
-            console.log(err.name + ': ' + err.message, " failed");
-        }).finally( ()=>
+            //console.log(err.name + ': ' + err.message, " failed");
+        }).finally(() =>
             delete webRtcStore.incomingCalls[callId]
         )
 }
@@ -216,7 +219,7 @@ export async function creatingAnswer(originalCaller, callId) {
 function onAnswer(answer) {
     console.log("--user answered")
     webRtcStore.peerConnection.setRemoteDescription(answer.answer);
-    webRtcStore.sendMessage('ready', {callId:answer.callId,user:webRtcStore.userId,state:'ENTERING_CALL'});
+    webRtcStore.sendMessage('ready', { callId: answer.callId, user: webRtcStore.userId, state: 'ENTERING_CALL' });
 }
 
 var receiveChannelCallback = function (event) {
@@ -247,7 +250,7 @@ export const webRtcStore = new WebRtc()
 
 
 function icecandidateAdded(ev, userId) {
-    console.log("-- new ICE candidate");
+    //console.log("-- new ICE candidate");
     if (ev.candidate) {
         webRtcStore.sendMessage("candidate", {
             origin: userId,
@@ -258,14 +261,20 @@ function icecandidateAdded(ev, userId) {
 var handlestatechangeCallback = function (event) {
     const state = webRtcStore.peerConnection.iceConnectionState;
     if (state === "failed" || state === "closed") {
-        
+
     } else if (state === "disconnected") {
-        
+
     }
 };
 var handleonnegotiatioCallback = function (event) {
-   
+
 };
+
+
+
+
+
+
 
 
 export type CallModel = {
@@ -282,22 +291,22 @@ export type CallModel = {
 
 var onReceive_ChannelOpenState = function (event) {
 
-    console.log("dataChannel.OnOpen", event);
+    //console.log("dataChannel.OnOpen");
 
     if (webRtcStore.Receive_dataChannel?.readyState == "open") {
-        
+
     }
 };
 
 var onReceive_ChannelMessageCallback = function (event) {
-    console.log("dataChannel.OnMessage:", event);
-    
+    //console.log("dataChannel.OnMessage:");
+
 };
 
 var onReceive_ChannelErrorState = function (error) {
-    console.log("dataChannel.OnError:", error);
+    //console.log("dataChannel.OnError:");
 };
 
 var onReceive_ChannelCloseStateChange = function (event) {
-    console.log("dataChannel.OnClose", event);
+    //console.log("dataChannel.OnClose");
 };

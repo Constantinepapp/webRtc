@@ -1,9 +1,5 @@
-
-import { Router } from "express"
 import { v4 as uuidv4 } from 'uuid';
 import { WebSocket } from "ws";
-import { json } from "body-parser";
-import { start } from "repl";
 
 require('dotenv').config()
 
@@ -24,21 +20,6 @@ app.use(express.json());
 app.get("/api", (req: any, res: any) => {
     res.json({ message: "Hello from server!" });
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ///////////SOCKET
@@ -164,7 +145,6 @@ const callStateChange = (callId:string,newState:string) =>{
 
 const handleCallStart = (message:any) =>{
     const callToStart = calls[message.callId]
-    
     //@ts-ignore
     callToStart.partitipants.map(partitipant =>{
         const client = clientSockets[partitipant]
@@ -181,9 +161,7 @@ const forEachClient = (clientSockets: ClientSockets, cb: (value: ClientSocket, i
 
 const handleNewOffer = (clientSockets: ClientSockets, message: any,callId:string) => {
     forEachClient(clientSockets, (client, i, arr) => {
-        
         if (client.uid != message.target) return;
-
         message.callId = callId
         const newOffer = {
             callId:callId,
@@ -192,15 +170,10 @@ const handleNewOffer = (clientSockets: ClientSockets, message: any,callId:string
             offer:message.offer,
             time: new Date().toISOString(),
         }
-        
         client.ws.send(JSON.stringify({topic:'incoming_offer',message:newOffer}))
     })
 }
 
-
-const iceCandidate = (clientSockets:ClientSockets,message:any) =>{
-
-}
 
 const establishCall = (clientSockets:ClientSockets,message:any) => {
     forEachClient(clientSockets, (client, i, arr) => {
@@ -269,9 +242,6 @@ app.listen(process.env.PORT || 5000, () => {
 
 
 
-
-
-
 ////
 //1. user 1 request signaling server
 //2. server requests metadata from user 1
@@ -279,3 +249,5 @@ app.listen(process.env.PORT || 5000, () => {
 //4. user 2 accepts
 //5. server requests from user 2 metadata
 //6. user 2 sends metadata
+
+
