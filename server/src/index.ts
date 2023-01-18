@@ -33,185 +33,212 @@ const KEEP_CONNECTION_ALIVE_INTERVAL = 1000 * 60
 
 app.ws('/:userId', async (ws: any, req: any) => {
     const userId = req.params.userId
-    console.log("connect : ",userId)
+    console.log("connect : ", userId)
     clientSockets[userId] = { ws, uid: userId, lastTimeOfCommunication: Date.now(), intervalID: null }
-    
+
     startWebSocketInterval(userId)
 
     ws.on('message', (data: any) => {
         const msg = JSON.parse(data)
 
         //WEBSOCKET
-        if(msg.topic == "ping"){
+        if (msg.topic == "ping") {
             const userId = msg.data.userId
             restartActivityInterval(userId)
         }
-        
+
         //SIGNALING SERVER
-        if(msg.topic == 'new_offer'){
+        if (msg.topic == 'new_offer') {
             const callId = newCall(msg.data)
-            handleNewOffer(clientSockets,msg.data,callId)
+            handleNewOffer(clientSockets, msg.data, callId)
         }
         if (msg.topic == 'client_answer_to_offer') {
-            callStateChange(msg.data.callId,'OFFER_ACCEPTED')
-            establishCall(clientSockets,msg.data)
+            callStateChange(msg.data.callId, 'OFFER_ACCEPTED')
+            establishCall(clientSockets, msg.data)
         }
-        if(msg.topic == "user-online"){
+        if (msg.topic == "user-online") {
             refreshOnlineUsers()
         }
-        if(msg.topic == "candidate"){
+        if (msg.topic == "candidate") {
             handleCandidateChange(msg.data)
         }
-        if(msg.topic == "ready"){
-            callStateChange(msg.data.callId,"CALL_STARTED")
+        if (msg.topic == "ready") {
+            callStateChange(msg.data.callId, "CALL_STARTED")
             handleCallStart(msg.data)
         }
-        
+
         //CALL FUNCTIONS
-        if(msg.topic == "end_call"){
+        if (msg.topic == "end_call") {
             const callId = msg.data.callId
             const userId = msg.data.origin
-            endCall(callId,userId)
+            endCall(callId, userId)
             console.log(calls)
         }
     })
 
     ws.on('close', (ws: any) => {
-        disconnectWS(clientSockets, userId,'Socket close')
+        disconnectWS(clientSockets, userId, 'Socket close')
     });
 
     ws.on('error', (e: any) => {
         console.error(e);
-        disconnectWS(clientSockets, userId,'Error')
+        disconnectWS(clientSockets, userId, 'Error')
     })
 })
 
-const startWebSocketInterval = (userId:string) =>{
+const startWebSocketInterval = (userId: string) => {
     const clientSocket = clientSockets[userId]
-    if(!clientSocket){
-        return 
+    if (!clientSocket) {
+        return
     }
     clientSocket.intervalID = setInterval(() => {
         const diff = Date.now() - clientSocket.lastTimeOfCommunication
         if (diff >= timeout) {
-            disconnectWS(clientSockets,userId,'Inactivity')
+            disconnectWS(clientSockets, userId, 'Inactivity')
         }
     }, KEEP_CONNECTION_ALIVE_INTERVAL)
 }
 
-const clearUserInterval = (userId:string) =>{
+const clearUserInterval = (userId: string) => {
     const clientSocket = clientSockets[userId]
-    if(clientSocket?.intervalID){
+    if (clientSocket?.intervalID) {
         clearInterval(clientSocket.intervalID)
         clientSocket.intervalID = null
     }
 }
-const restartActivityInterval = (userId:string) =>{
+const restartActivityInterval = (userId: string) => {
     clearUserInterval(userId)
     startWebSocketInterval(userId)
 }
 
 
 
-const newCall = (data:any) =>{
+const newCall = (data: any) => {
     const callId = uuidv4()
     calls[callId] = {
-        callId:callId,
-        partitipants:[data.origin,data.target],
-        origin:data.origin,
-        target:data.target,
-        state:'INITIAL_OFFER'
+        callId: callId,
+        partitipants: [data.origin, data.target],
+        origin: data.origin,
+        target: data.target,
+        state: 'INITIAL_OFFER'
     }
     return callId
 }
 
 
-const endCall = (callId:string,userId:string) =>{
+const endCall = (callId: string, userId: string) => {
     const call = calls[callId]
-    for(let partitipant of call.partitipants){
-        if(call.state != 'CALL_ENDED'){
+    for (let partitipant of call?.partitipants) {
+        if (call.state != 'CALL_ENDED') {
             const client = clientSockets[partitipant]
-            client.ws.send(JSON.stringify({topic:'call_ended',data:{callId:callId,origin:userId}}))
+            const payload: WebsocketMessage = {
+                topic: 'call_ended',
+                data: {
+                    callId: callId,
+                    origin: userId
+                }
+            }
+            client.ws.send(JSON.stringify(payload))
         }
     }
-    callStateChange(callId,"CALL_ENDED")
+    callStateChange(callId, "CALL_ENDED")
 }
 
-const callStateChange = (callId:string,newState:string) =>{
+const callStateChange = (callId: string, newState: string) => {
     calls[callId].state = newState
-    if(newState=="CALL_STARTED"){
+    if (newState == "CALL_STARTED") {
         calls[callId].call_start_timestamp = new Date().toISOString()
     }
-    if(newState == "CALL_ENDED"){
+    if (newState == "CALL_ENDED") {
         calls[callId].call_end_timestamp = new Date().toISOString()
     }
 }
 
-const handleCallStart = (data:any) =>{
+const handleCallStart = (data: any) => {
     const callToStart = calls[data.callId]
     //@ts-ignore
-    callToStart.partitipants.map(partitipant =>{
+    callToStart.partitipants.map(partitipant => {
         const client = clientSockets[partitipant]
-        client.ws.send(JSON.stringify({topic:'call_started',data:{call:calls[data.callId]}}))
+        const payload: WebsocketMessage = {
+            topic: 'call_started',
+            data: { call: calls[data.callId] }
+        }
+        client.ws.send(JSON.stringify(payload))
     })
 }
-const handleCandidateChange = (data:any) =>{
+const handleCandidateChange = (data: any) => {
     forEachClient(clientSockets, (client, i, arr) => {
-        client.ws.send(JSON.stringify({topic:'server_candidate',data:{candidate:data.candidate}}))
+        const payload: WebsocketMessage = {
+            topic: 'server_candidate',
+            data: {
+                candidate: data.candidate
+            }
+        }
+        client.ws.send(JSON.stringify(payload))
     })
 }
 
 const forEachClient = (clientSockets: ClientSockets, cb: (value: ClientSocket, index: number, array: ClientSocket[]) => any) => Object.values(clientSockets).forEach(cb)
 
-const handleNewOffer = (clientSockets: ClientSockets, data: any,callId:string) => {
+const handleNewOffer = (clientSockets: ClientSockets, data: any, callId: string) => {
     forEachClient(clientSockets, (client, i, arr) => {
         if (client.uid != data.target) return;
         data.callId = callId
         const newOffer = {
-            callId:callId,
+            callId: callId,
             origin: data.origin,
             target: data.target,
-            offer:data.offer,
+            offer: data.offer,
             time: new Date().toISOString(),
         }
-        client.ws.send(JSON.stringify({topic:'incoming_offer',data:newOffer}))
+        
+        const payload: WebsocketMessage = {
+            topic: 'incoming_offer',
+            data: newOffer
+        }
+        client.ws.send(JSON.stringify(payload))
     })
 }
 
 
-const establishCall = (clientSockets:ClientSockets,data:any) => {
+const establishCall = (clientSockets: ClientSockets, data: any) => {
     forEachClient(clientSockets, (client, i, arr) => {
-        
+
         // console.log(client.uid,data)
         if (client.uid != data.target) return;
-       
+
         const newAnswer = {
-            answer:data.answer,
-            origin:data.origin,
-            callId:data.callId
+            answer: data.answer,
+            origin: data.origin,
+            callId: data.callId
         }
         //console.log(newAnswer)
-        client.ws.send(JSON.stringify({topic:'incoming_answer',data:newAnswer}))
+        const payload: WebsocketMessage = {
+            topic: 'incoming_answer',
+            data: newAnswer
+        }
+        client.ws.send(JSON.stringify(payload))
     })
- 
+
     //console.log(`starting call between user ${call.origin} and ${call.target}`)
 }
 
-const refreshOnlineUsers = () =>{
+const refreshOnlineUsers = () => {
     forEachClient(clientSockets, (client, i, arr) => {
-        client.ws.send(JSON.stringify({
-            topic:'user-online',
-            data:{
-                onlineUsers:Object.keys(clientSockets)
+        const payload:WebsocketMessage = {
+            topic: 'user-online',
+            data: {
+                onlineUsers: Object.keys(clientSockets)
             }
-        }))
+        }
+        client.ws.send(JSON.stringify(payload))
     })
 }
 
 const timeout = 10 * 1000
 
 
-const disconnectWS = (clientSockets: ClientSockets, id: string,cause:string) => {
+const disconnectWS = (clientSockets: ClientSockets, id: string, cause: string) => {
     const clientSocket = clientSockets[id]
     console.log(`disconect : ${id} (${cause})`,)
     if (clientSocket) {
@@ -228,10 +255,9 @@ type ClientSockets = Record<string, ClientSocket>
 type UniqueUsers = Record<number, { userid: number, name: string, treepath: string, extNumber: string, inCall: boolean }>
 
 
-type Calls = {
-    origin: string,
-    target: string,
-
+type WebsocketMessage = {
+    topic: string,
+    data: any
 }
 //////////END SOCKET
 

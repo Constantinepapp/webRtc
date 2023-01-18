@@ -65,7 +65,7 @@ export class WebRtc {
                     const parseData = JSON.parse(event.data)
                     if (parseData) {
                         if (parseData.topic == "incoming_offer") {
-
+                            console.log("incoming offer")
                             onOffer(parseData.data)
                         }
                         if (parseData.topic == "user-online") {
@@ -218,7 +218,7 @@ export async function creatingAnswer(originalCaller, callId) {
 }
 
 function onAnswer(answer) {
-    console.log("--user answered")
+    console.log("--user answered",answer)
     webRtcStore.peerConnection.setRemoteDescription(answer.answer);
     webRtcStore.sendMessage('ready', { callId: answer.callId, user: webRtcStore.userId, state: 'ENTERING_CALL' });
 }
