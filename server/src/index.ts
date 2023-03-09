@@ -28,6 +28,8 @@ var clientSockets = {} as ClientSockets
 // const clientToClientCalls = {} as Record<Calls>
 var calls = {} as Record<string, any>
 
+const endCallTimeOuts: any = {}
+
 const KEEP_CONNECTION_ALIVE_INTERVAL = 1000 * 60
 
 
@@ -35,6 +37,10 @@ app.ws('/:userId', async (ws: any, req: any) => {
     const userId = req.params.userId
     console.log("connect : ", userId)
     clientSockets[userId] = { ws, uid: userId, lastTimeOfCommunication: Date.now(), intervalID: null }
+
+    // if (endCallTimeOuts[userId]) {
+    //     clearTimeout(endCallTimeOuts[userId].timeout)
+    // }
 
     startWebSocketInterval(userId)
 
@@ -77,6 +83,8 @@ app.ws('/:userId', async (ws: any, req: any) => {
     })
 
     ws.on('close', (ws: any) => {
+
+        //createEndCallTimeoutOnUserDisconnection(userId)
         disconnectWS(clientSockets, userId, 'Socket close')
     });
 
@@ -128,6 +136,7 @@ const newCall = (data: any) => {
 
 const endCall = (callId: string, userId: string) => {
     const call = calls[callId]
+    console.log(call)
     for (let partitipant of call?.partitipants) {
         if (call.state != 'CALL_ENDED') {
             const client = clientSockets[partitipant]
@@ -178,6 +187,18 @@ const handleCandidateChange = (data: any) => {
     })
 }
 
+///On users disconection starts a timeout that eventualy will end all user calls if users doesnt reconect to signaling server in time
+const createEndCallTimeoutOnUserDisconnection = (userId: string) => {
+    const endCallTimeOut = setTimeout(() => {
+        const userCalls = getUserOngoingCalls(userId)
+        userCalls.map(call => endCall(call.id, userId))
+    }, 10000)
+    endCallTimeOuts[userId] = { timeout: endCallTimeOut, callsToEnd: getUserOngoingCalls(userId)}
+}
+const getUserOngoingCalls = (userId: string) => {
+    return Object.values(calls).filter(call => call.partitipants.includes(userId))
+}
+
 const forEachClient = (clientSockets: ClientSockets, cb: (value: ClientSocket, index: number, array: ClientSocket[]) => any) => Object.values(clientSockets).forEach(cb)
 
 const handleNewOffer = (clientSockets: ClientSockets, data: any, callId: string) => {
@@ -191,7 +212,7 @@ const handleNewOffer = (clientSockets: ClientSockets, data: any, callId: string)
             offer: data.offer,
             time: new Date().toISOString(),
         }
-        
+
         const payload: WebsocketMessage = {
             topic: 'incoming_offer',
             data: newOffer
@@ -225,7 +246,7 @@ const establishCall = (clientSockets: ClientSockets, data: any) => {
 
 const refreshOnlineUsers = () => {
     forEachClient(clientSockets, (client, i, arr) => {
-        const payload:WebsocketMessage = {
+        const payload: WebsocketMessage = {
             topic: 'user-online',
             data: {
                 onlineUsers: Object.keys(clientSockets)

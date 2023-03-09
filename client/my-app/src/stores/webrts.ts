@@ -18,6 +18,10 @@ export class WebRtc {
     currentUsermicrophoneAudioStream: any = null
     connectionSenderVideo: any = null
 
+
+    remoteStream: any = null
+
+
     Send_dataChannel: any = null
     Receive_dataChannel: any = null
     userId: string = null
@@ -65,6 +69,7 @@ export class WebRtc {
                     const parseData = JSON.parse(event.data)
                     if (parseData) {
                         if (parseData.topic == "incoming_offer") {
+                            console.log("------------------------incoming offer", parseData.data.offer)
                             console.log("incoming offer")
                             onOffer(parseData.data)
                         }
@@ -72,6 +77,7 @@ export class WebRtc {
                             storeOnlineUsers(parseData.data.onlineUsers)
                         }
                         if (parseData.topic == 'incoming_answer') {
+                            console.log("------------------------incoming answer", parseData.data.answer)
                             onAnswer(parseData.data)
                         }
                         if (parseData.topic == "server_candidate") {
@@ -157,6 +163,7 @@ async function createWebrtcIntialConnection() {
     };
 
     webRtcStore.peerConnection = new RTCPeerConnection(configuration);
+    localStorage.setItem("peerConnection", JSON.stringify(webRtcStore.peerConnection))
     //when the browser finds an ice candidate we send it to another peer 
     webRtcStore.peerConnection.onicecandidate = (e) => icecandidateAdded(e, webRtcStore.userId);
     webRtcStore.peerConnection.oniceconnectionstatechange = handlestatechangeCallback;
@@ -173,11 +180,30 @@ const offerOptions = {
 export async function creatingOffer(targetId) {
     try {
         await createWebrtcIntialConnection()
+        console.log("********************* ADDING EVENT LISTENER FOR INCOMING TRACKS")
+        webRtcStore.peerConnection.ontrack = (e) => {
+            // console.log(e.streams)
+            console.log("incoming stream length : ", e.streams?.length)
+            if (webRtcStore.remoteStream !== e.streams[0]) {
+                webRtcStore.remoteStream = e.streams[0]
+            }
+        };
+        const stream = webRtcStore.currentUserStream
+        stream.getTracks().forEach(track => {
+            //console.log(track);
+            if (track.kind == "video") {
+                webRtcStore.connectionSenderVideo = webRtcStore.peerConnection?.addTrack(track, stream)
+            }
+            else {
+                webRtcStore.peerConnection?.addTrack(track, stream)
+            }
+        })
         //@ts-ignore
         const offer = await webRtcStore.peerConnection.createOffer(offerOptions);
         await webRtcStore.peerConnection.setLocalDescription(offer);
 
         console.log("-- creating offer");
+        console.log("------------------------sendin offer", offer)
         webRtcStore.sendMessage('new_offer', {
             origin: webRtcStore.userId,
             target: targetId,
@@ -198,11 +224,30 @@ function onOffer(offer) {
 
 export async function creatingAnswer(originalCaller, callId) {
     await createWebrtcIntialConnection()
+    console.log("********************* ADDING EVENT LISTENER FOR INCOMING TRACKS")
+    webRtcStore.peerConnection.ontrack = (e) => {
+        // console.log(e.streams)
+        console.log("incoming stream length : ", e.streams?.length)
+        if (webRtcStore.remoteStream !== e.streams[0]) {
+            webRtcStore.remoteStream = e.streams[0]
+        }
+    };
+    const stream = webRtcStore.currentUserStream
+    stream.getTracks().forEach(track => {
+        //console.log(track);
+        if (track.kind == "video") {
+            webRtcStore.connectionSenderVideo = webRtcStore.peerConnection?.addTrack(track, stream)
+        }
+        else {
+            webRtcStore.peerConnection?.addTrack(track, stream)
+        }
+    })
     webRtcStore.peerConnection.ondatachannel = receiveChannelCallback;
     webRtcStore.peerConnection.setRemoteDescription(webRtcStore.incomingCalls[callId].offer)
         .then(() => webRtcStore.peerConnection.createAnswer())
         .then(function (answer) {
             webRtcStore.peerConnection.setLocalDescription(answer);
+            console.log("------------------------sendin answer", answer)
             webRtcStore.sendMessage('client_answer_to_offer', {
                 target: originalCaller,
                 origin: webRtcStore.userId,
@@ -218,7 +263,7 @@ export async function creatingAnswer(originalCaller, callId) {
 }
 
 function onAnswer(answer) {
-    console.log("--user answered",answer)
+    console.log("--user answered", answer)
     webRtcStore.peerConnection.setRemoteDescription(answer.answer);
     webRtcStore.sendMessage('ready', { callId: answer.callId, user: webRtcStore.userId, state: 'ENTERING_CALL' });
 }
@@ -264,7 +309,7 @@ var handlestatechangeCallback = function (event) {
     if (state === "failed" || state === "closed") {
 
     } else if (state === "disconnected") {
-
+        console.log("disconected*********************")
     }
 };
 var handleonnegotiatioCallback = function (event) {

@@ -3,7 +3,7 @@ import './App.css';
 import { useEffect, useRef, useState } from 'react'
 import { CallModel, creatingAnswer, creatingOffer, webRtcStore } from './stores/webrts';
 import { observer } from 'mobx-react-lite';
-import { toJS } from 'mobx';
+import { autorun, toJS } from 'mobx';
 import { Stream } from 'stream';
 
 
@@ -21,24 +21,26 @@ const App = observer(function App() {
 
   const [targetUser, setTargetUser] = useState(null)
   useEffect(() => {
+    autorun(() => {
+      console.log(toJS(webRtcStore.peerConnection))
+      console.log("local desc -> ", webRtcStore.peerConnection?.localDescription)
+      console.log("remote desc -> ", webRtcStore.peerConnection?.remoteDescription)
 
 
-    // fetch("/api").then(res => res.json())
-    // .then(json=>console.log(json))
-    // .catch(err => { console.error(err) });
-
+    })
   }, [])
-
 
 
   useEffect(() => {
     if (webRtcStore.peerConnection && webRtcStore.currentUserStream) {
       const stream = webRtcStore.currentUserStream
 
+      //console.log('--------------------current user has a stream , and an active peer connection')
       if (webRtcStore.connectionSenderVideo) {
+        //console.log('--------------------connection sender video exists')
         try {
-          console.log("replacing track video")
-          console.log(stream.getVideoTracks())
+          console.log("-----------------------------------------replacing track video")
+          //console.log(stream.getVideoTracks())
           webRtcStore.connectionSenderVideo.replaceTrack(stream.getVideoTracks()[0])
         }
         catch (e) {
@@ -46,20 +48,8 @@ const App = observer(function App() {
         }
 
       }
-      else {
-        stream.getTracks().forEach(track => {
-          //console.log(track);
-          if (track.kind == "video") {
-            webRtcStore.connectionSenderVideo = webRtcStore.peerConnection?.addTrack(track, stream)
-          }
-          else {
-            webRtcStore.peerConnection?.addTrack(track, stream)
-          }
-        })
-      }
-
+      
       console.log(toJS(webRtcStore.connectionSenderVideo))
-
     }
   }, [webRtcStore.peerConnection, webRtcStore.currentUserStream])
 
@@ -154,21 +144,22 @@ const VideoStreamPeer = observer(() => {
   const [remoteStream, setRemoteStream] = useState(null)
   useEffect(() => {
 
+    console.log(webRtcStore.peerConnection)
     if (webRtcStore.peerConnection) {
-      webRtcStore.peerConnection.addEventListener('track', (e) => {
-        // console.log(e.streams)
-        // console.log("incoming stream length : ",e.streams?.length)
-        if (remoteStream !== e.streams[0]) {
-          setRemoteStream(e.streams[0])
-        }
-      });
+      
+
     }
-    else{
+    else {
+      //console.log("*************** setting remote stream to null")
       setRemoteStream(null)
     }
   }, [webRtcStore.peerConnection])
 
 
+
+  useEffect(()=>{
+    setRemoteStream(webRtcStore.remoteStream)
+  },[webRtcStore.remoteStream])
 
   const videoRefPeer = useRef(null)
   if (videoRefPeer.current) {
@@ -195,7 +186,7 @@ const VideoStream = () => {
 
 
   const startStopTrack = async (trackType: "audio" | "video") => {
-    const stream =trackType == "audio" ? webRtcStore.currentUsermicrophoneAudioStream : webRtcStore.currentUserStream
+    const stream = trackType == "audio" ? webRtcStore.currentUsermicrophoneAudioStream : webRtcStore.currentUserStream
     let newState
     stream.getTracks().forEach(function (track) {
       if (track.kind == trackType) {
@@ -233,18 +224,18 @@ const VideoStream = () => {
       videoStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           //@ts-ignore
-          cursor: "always"
+          cursor: "always",
         },
         audio: false
       });
-      if(!webRtcStore.currentUsermicrophoneAudioStream){
+      if (!webRtcStore.currentUsermicrophoneAudioStream) {
         //console.log("changed")
         webRtcStore.currentUsermicrophoneAudioStream = await navigator?.mediaDevices?.getUserMedia({
           audio: true,
           video: false
         })
       }
-    
+
       outputStream = new MediaStream([...videoStream.getTracks(), ...webRtcStore.currentUsermicrophoneAudioStream.getAudioTracks()]);
       videoRef.current.srcObject = videoStream
       let video = videoRef.current;
@@ -265,18 +256,19 @@ const VideoStream = () => {
           width: 500,
           facingMode: {
             exact: "user"
-          }
+          },
+
 
         }
       })
-      if(!webRtcStore.currentUsermicrophoneAudioStream){
+      if (!webRtcStore.currentUsermicrophoneAudioStream) {
         //console.log("changed")
         webRtcStore.currentUsermicrophoneAudioStream = await navigator?.mediaDevices?.getUserMedia({
           audio: true,
           video: false
         })
       }
-    
+
       outputStream = new MediaStream([...videoStream.getTracks(), ...webRtcStore.currentUsermicrophoneAudioStream.getAudioTracks()]);
       videoRef.current.srcObject = videoStream
       webRtcStore.currentUserStream = outputStream
